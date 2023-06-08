@@ -53,7 +53,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msisdn := req.MSISDN
+	msisdnA := req.MSISDN
 	var msisdnB string
 	index := strings.Index(req.Message, "*130*")
 	if index != -1 {
@@ -63,17 +63,17 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Значение не найдено.")
 	}
 
-	fmt.Printf("Полученные данные: MSISDN=%s, Message=%s\n", msisdn, req.Message)
+	fmt.Printf("Полученные данные: MSISDN=%s, Message=%s\n", msisdnA, req.Message)
 
-	if err := addOrUpdateSubscriberA(msisdn, msisdnB); err != nil {
+	/*if err := addOrUpdateSubscriberA(msisdn, msisdnB); err != nil {
 		log.Printf("Ошибка добавления/обновления абонента A: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Ошибка добавления/обновления абонента A: %v", err)
 		return
-	}
-
+	}*/
+	acceptSubB("992907103137", "992334440")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Значение поля MSISDN: %s", msisdn)
+	fmt.Fprintf(w, "Значение поля MSISDN: %s", msisdnA)
 }
 
 func addOrUpdateSubscriberA(msisdn string, msisdnB string) error {
@@ -126,6 +126,26 @@ func addOrUpdateSubscriberB(msisdnB string, subscriberAId int) error {
 			log.Println("Номер абонента B существует")
 		}
 	}
+
+	return nil
+}
+
+func acceptSubB(msisdnB string, msisdnA string) error {
+	fmt.Println("start")
+	var id int
+	var is_accept bool
+	var subscriber_b_number string
+	var subscriber_a_number string
+	fmt.Println(msisdnA, "   ", msisdnB)
+	err := db.QueryRow("select s.id from service join subscriber_a sa on sa.id = s.subscriber_a_id where is_accept = false and subscriber_b_number = $1 and sa.number = $2", msisdnB, msisdnA).Scan(&id)
+	fmt.Println(id, is_accept, subscriber_a_number, subscriber_b_number)
+	fmt.Println("after_select")
+
+	if err != nil {
+		return fmt.Errorf("Ошибка выполнения запроса: %v", err)
+	}
+	fmt.Println("clear_select")
+	fmt.Println(id, is_accept, subscriber_a_number, subscriber_b_number)
 
 	return nil
 }
