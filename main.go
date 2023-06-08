@@ -57,7 +57,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	var msisdnB string
 	index := strings.Index(req.Message, "*130*")
 	if index != -1 {
-		msisdnB := req.Message[index+5 : len(req.Message)-1]
+		msisdnB = req.Message[index+5 : len(req.Message)-1]
 		fmt.Println("Значение после *130*:", msisdnB)
 	} else {
 		fmt.Println("Значение не найдено.")
@@ -65,17 +65,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Полученные данные: MSISDN=%s, Message=%s\n", msisdn, req.Message)
 
-	if err := addOrUpdateSubscriberA(msisdn); err != nil {
+	if err := addOrUpdateSubscriberA(msisdn, msisdnB); err != nil {
 		log.Printf("Ошибка добавления/обновления абонента A: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Ошибка добавления/обновления абонента A: %v", err)
-		return
-	}
-
-	if err := addOrUpdateSubscriberB(msisdnB, subscriberAId); err != nil {
-		log.Printf("Ошибка добавления/обновления абонента B: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, "Ошибка добавления/обновления абонента B: %v", err)
 		return
 	}
 
@@ -83,19 +76,16 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Значение поля MSISDN: %s", msisdn)
 }
 
-func addOrUpdateSubscriberA(msisdn string) error {
-	var subsNumberA string
+func addOrUpdateSubscriberA(msisdn string, msisdnB string) error {
 	var subscriberAId int
-	row := db.QueryRow("SELECT id, number FROM subscriber_a WHERE number=$1", msisdn)
+	row := db.QueryRow("SELECT id FROM subscriber_a WHERE number=$1", msisdn)
 
-	if err := row.Scan(&subscriberAId, &subsNumberA); err != nil {
+	if err := row.Scan(&subscriberAId); err != nil {
 		if err == sql.ErrNoRows {
 			if _, err := db.Exec("INSERT INTO subscriber_a (number) VALUES ($1)", msisdn); err != nil {
 				return fmt.Errorf("Ошибка добавления номера в базу данных: %v", err)
 			}
 			log.Println("Номер абонента A успешно добавлен в базу данных")
-			addOrUpdateSubscriberB(msisdnB, subscriberAId)
-
 		} else {
 			return fmt.Errorf("Ошибка выполнения запроса: %v", err)
 		}
@@ -103,12 +93,16 @@ func addOrUpdateSubscriberA(msisdn string) error {
 		log.Println("Номер абонента A существует", subscriberAId)
 	}
 
+	if err := addOrUpdateSubscriberB(msisdnB, subscriberAId); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func addOrUpdateSubscriberB(subsNumberB string, subscriberAId int) error {
+func addOrUpdateSubscriberB(msisdnB string, subscriberAId int) error {
 	var count int
-	err := db.QueryRow("SELECT count(*) FROM service WHERE subscriber_b_number=$1", subsNumberB).Scan(&count)
+	err := db.QueryRow("SELECT count(*) FROM service WHERE subscriber_b_number=$1", msisdnB).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("Ошибка выполнения запроса: %v", err)
 	}
@@ -116,12 +110,12 @@ func addOrUpdateSubscriberB(subsNumberB string, subscriberAId int) error {
 	if count > 0 {
 		log.Println("Номер абонента B существует")
 	} else {
-		row := db.QueryRow("SELECT subscriber_b_number FROM service WHERE subscriber_b_number=$1", subsNumberB)
+		row := db.QueryRow("SELECT subscriber_b_number FROM service WHERE subscriber_b_number=$1", msisdnB)
 		var subsNumberBFromDB string
 		if err := row.Scan(&subsNumberBFromDB); err != nil {
 			if err == sql.ErrNoRows {
-				fmt.Println(subsNumberB)
-				if _, err := db.Exec("INSERT INTO service (subscriber_b_number) VALUES ($1)", subsNumberB); err != nil {
+				fmt.Println(msisdnB)
+				if _, err := db.Exec("INSERT INTO service (subscriber_a_id, subscriber_b_number, is_accept) VALUES ($1, $2, $3)", subscriberAId, msisdnB, false); err != nil {
 					return fmt.Errorf("Ошибка добавления номера в базу данных: %v", err)
 				}
 				log.Println("Номер абонента B успешно добавлен в базу данных")
