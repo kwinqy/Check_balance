@@ -57,7 +57,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	var msisdnB string
 	index := strings.Index(req.Message, "*130*")
 	if index != -1 {
-		msisdnB = req.Message[index+5 : len(req.Message)-1]
+		msisdnB = req.Message[index+5 : len(req.Message)-3]
 		fmt.Println("Значение после *130*:", msisdnB)
 	} else {
 		fmt.Println("Значение не найдено.")
@@ -65,13 +65,13 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Полученные данные: MSISDN=%s, Message=%s\n", msisdnA, req.Message)
 
-	/*if err := addOrUpdateSubscriberA(msisdn, msisdnB); err != nil {
+	/*	if err := addOrUpdateSubscriberA(msisdnA, msisdnB); err != nil {
 		log.Printf("Ошибка добавления/обновления абонента A: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "Ошибка добавления/обновления абонента A: %v", err)
 		return
 	}*/
-	acceptSubB("992907103137", "992334440")
+	acceptSubB(msisdnB, msisdnA)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Значение поля MSISDN: %s", msisdnA)
 }
@@ -130,22 +130,35 @@ func addOrUpdateSubscriberB(msisdnB string, subscriberAId int) error {
 	return nil
 }
 
-func acceptSubB(msisdnB string, msisdnA string) error {
-	fmt.Println("start")
-	var id int
-	var is_accept bool
-	var subscriber_b_number string
-	var subscriber_a_number string
-	fmt.Println(msisdnA, "   ", msisdnB)
-	err := db.QueryRow("select s.id from service join subscriber_a sa on sa.id = s.subscriber_a_id where is_accept = false and subscriber_b_number = $1 and sa.number = $2", msisdnB, msisdnA).Scan(&id)
-	fmt.Println(id, is_accept, subscriber_a_number, subscriber_b_number)
-	fmt.Println("after_select")
+func acceptSubB(msisdnB, msisdnA string) error {
 
+	var id int
+	var subscriber_a_number, subscriber_b_number string
+	var isAccept bool
+	fmt.Println(msisdnA, "   ", msisdnB)
+
+	var count int
+
+	err := db.QueryRow("select count(*) from service s join subscriber_a sa on sa.id = s.subscriber_a_id where s.is_accept = false and s.subscriber_b_number = $1 and sa.number = $2", msisdnB, msisdnA).Scan(&count)
+	fmt.Println(count)
 	if err != nil {
 		return fmt.Errorf("Ошибка выполнения запроса: %v", err)
 	}
-	fmt.Println("clear_select")
-	fmt.Println(id, is_accept, subscriber_a_number, subscriber_b_number)
+
+	if count > 0 {
+		fmt.Println("start")
+		err := db.QueryRow("select s.id, sa.number as subscriber_a_number, s.is_accept, s.subscriber_b_number from service s join subscriber_a sa on sa.id = s.subscriber_a_id where s.is_accept = false and s.subscriber_b_number = $1 and sa.number = $2", msisdnB, msisdnA).Scan(&id, &subscriber_a_number, &isAccept, &subscriber_b_number)
+		if err != nil {
+			return err
+		}
+		fmt.Println(id, isAccept, subscriber_a_number, subscriber_b_number)
+	} else {
+		return fmt.Errorf("Ошибка ")
+
+	}
+	if err != nil {
+		return fmt.Errorf("ошибка выполнения запроса: %v", err)
+	}
 
 	return nil
 }
